@@ -18,7 +18,11 @@
 │ Phase 3: 写作评估 ✅ 已实现 │  素材够不够写？缺口 → 回 Phase 1 补充访谈
 └────────────┬──────────────┘
              ▼
-     Phase 4 初稿生成 → Phase 5 人工审核 → Phase 6 家族记忆库（RAG 对话）
+┌───────────────────────────┐
+│ Phase 4: 初稿生成 ✅ 已实现 │  阶段分组 → 大纲 → 逐章写作 → 事实回检 → 统稿
+└────────────┬──────────────┘
+             ▼
+     Phase 5 人工审核 → Phase 6 家族记忆库（RAG 对话）
 ```
 
 ## Phase 1：初次访谈 Agent（LangGraph）
@@ -58,6 +62,18 @@ MySQL 素材 → gather 摘要 → assess 打分找缺口 → plan 追问 → va
 
 详见 [Phase 3 设计文档](docs/phase3-assessment-design.md)。
 
+## Phase 4：初稿生成
+
+```text
+素材 → 阶段分组 → 大纲 → write ⇄ check（逐章写作+事实回检循环）→ 统稿 → 回忆录初稿
+```
+
+- 有出生年按年龄分 童年/少年/青年/中年/晚年，无则按年代分组。
+- 事实回检不通过不阻断：挂批注、留人工复核入口（存疑原文 + 查证片段范围）。
+- 统稿只做衔接（序/过渡/尾声），不改写正文、不增加事实。
+
+详见 [Phase 4 设计文档](docs/phase4-drafting-design.md)。
+
 ## 快速开始
 
 ```bash
@@ -76,6 +92,9 @@ PYTHONPATH=src python3 examples/phase2_demo.py
 # Phase 3 演示：访谈 → 素材处理 → 写作评估 → 补充访谈提纲
 PYTHONPATH=src python3 examples/phase3_demo.py
 
+# Phase 4 演示：访谈 → 素材处理 → 评估 → 初稿生成（含回检与复核清单）
+PYTHONPATH=src python3 examples/phase4_demo.py
+
 # 接真模型（可选，不设则用离线 Demo 实现）
 export TMS_LLM_BASE_URL="https://api.deepseek.com/v1"
 export TMS_LLM_API_KEY="sk-..." TMS_LLM_MODEL="deepseek-chat"
@@ -87,8 +106,9 @@ export TMS_MYSQL_URL="mysql://root:pass@127.0.0.1:3306/timememory"  # 生产库
 
 ```python
 from timememory.interview import InterviewAgent, ElderProfile
-from timememory.material import run_material_pipeline, retrieve, get_embedder
+from timememory.material import run_material_pipeline
 from timememory.assessment import run_assessment, render_brief
+from timememory.drafting import run_drafting
 
 # Phase 1：访谈
 agent = InterviewAgent(elder=ElderProfile(name="张爷爷"))
@@ -101,11 +121,16 @@ while True:
 
 # Phase 2：素材处理
 result = run_material_pipeline(agent.session_id, agent.fragments_json())
-print(result["stats"])  # 清洗/向量/节点/边统计
 
 # Phase 3：写作评估 → 缺口回 Phase 1 补访
-out = run_assessment(result["store"], agent.session_id)
-print(render_brief(out["assessment"], out["plan"]))
+out3 = run_assessment(result["store"], agent.session_id)
+print(render_brief(out3["assessment"], out3["plan"]))
+
+# Phase 4：初稿生成 → 复核清单交 Phase 5 人工审核
+out4 = run_drafting(result["store"], agent.session_id,
+                    elder={"name": "张爷爷"}, birth_year=1953,
+                    assessment=out3["assessment"])
+print(out4["manuscript"])
 ```
 
 ## 目录结构
@@ -114,7 +139,8 @@ print(render_brief(out["assessment"], out["plan"]))
 src/timememory/
 ├── interview/     Phase 1：访谈 Agent（router/ask/human/extract/validate/fix/record/closing）
 ├── material/      Phase 2：素材处理（clean/embed/extract_kg/persist + 混合检索）
-└── assessment/    Phase 3：写作评估（gather/assess/plan/validate + 访谈提纲）
+├── assessment/    Phase 3：写作评估（gather/assess/plan/validate + 访谈提纲）
+└── drafting/      Phase 4：初稿生成（stages/outline/write ⇄ check/polish/render）
 docs/                       设计文档
 tests/                      单元测试（unittest）
 examples/                   各阶段演示脚本
