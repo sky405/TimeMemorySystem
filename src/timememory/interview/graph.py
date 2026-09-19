@@ -112,8 +112,32 @@ def build_interview_graph(llm: InterviewLLM):
         current = state["current_topic_id"]
         topic = get_topic(current)
         elder = state.get("elder", {})
+        extra: dict = {}
 
-        if state.get("turn_count", 0) == 0 and not _last_elder_text(state):
+        # 补访提纲脚本优先：写作 Agent 指定的问题原样问出，并切到对应话题
+        script_text = ""
+        script = [dict(s) for s in state.get("script", [])]
+        if script:
+            item = script.pop(0)
+            extra["script"] = script
+            q_topic = item.get("topic_id") or current
+            if q_topic not in TOPIC_MAP:
+                q_topic = current
+            if q_topic != current:
+                extra["current_topic_id"] = q_topic
+                extra["covered_topic_ids"] = [current]
+                current, topic = q_topic, get_topic(q_topic)
+            script_text = (item.get("question") or "").strip()
+            if script_text and state.get("turn_count", 0) == 0 and not _last_elder_text(state):
+                name = elder.get("name", "老人家")
+                hometown = f"听说您老家是{elder.get('hometown')}，" if elder.get("hometown") else ""
+                script_text = (f"{name}您好！我是您的回忆录访谈员小记。{hometown}"
+                               f"上次聊完后，我们发现还有些故事没讲透，今天接着聊聊。"
+                               f"先问您一个：{script_text}")
+
+        if script_text:
+            text = script_text
+        elif state.get("turn_count", 0) == 0 and not _last_elder_text(state):
             name = elder.get("name", "老人家")
             hometown = f"听说您老家是{elder.get('hometown')}，" if elder.get("hometown") else ""
             text = (f"{name}您好！我是您的回忆录访谈员小记。{hometown}"
@@ -127,7 +151,7 @@ def build_interview_graph(llm: InterviewLLM):
             text = llm.ask_followup(topic, d.focus, _last_elder_text(state))
 
         msg = {"role": "ai", "text": text, "topic": current, "turn": state.get("turn_count", 0)}
-        return {"messages": [msg], "pending_question": text, "last_reply": text}
+        return {"messages": [msg], "pending_question": text, "last_reply": text, **extra}
 
     # -- human：等老人回答 ----------------------------------------------------------
     def human(state: InterviewState) -> dict:

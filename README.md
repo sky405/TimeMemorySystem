@@ -6,6 +6,12 @@
 用户（老人家属）注册 → 填写老人基本信息
         │
         ▼
+┌─────────────────────────────────────────┐
+│ 编排层 ✅ 已实现                          │
+│  访谈 Agent ◄──提纲脚本── 写作 Agent      │
+│   采集素材      缺口补访     评估+成稿     │
+└────────────┬────────────────────────────┘
+             ▼
 ┌───────────────────────────┐
 │ Phase 1: 初次访谈 ✅ 已实现 │  LangGraph 访谈 Agent，产出有效记忆片段
 └────────────┬──────────────┘
@@ -15,7 +21,7 @@
 └────────────┬──────────────┘
              ▼
 ┌───────────────────────────┐
-│ Phase 3: 写作评估 ✅ 已实现 │  素材够不够写？缺口 → 回 Phase 1 补充访谈
+│ Phase 3: 写作评估 ✅ 已实现 │  素材够不够写？缺口 → 补充访谈提纲
 └────────────┬──────────────┘
              ▼
 ┌───────────────────────────┐
@@ -24,6 +30,19 @@
              ▼
      Phase 5 人工审核 → Phase 6 家族记忆库（RAG 对话）
 ```
+
+## 编排层：访谈 ↔ 写作协作
+
+```text
+interview → material → assess → draft → END
+                ↑_________│（有缺口且预算未尽 → 带提纲再访一轮）
+```
+
+- 写作 Agent 的追问经**提纲脚本**注入访谈 Agent，原样问出、自动切话题——不是只打印在报告里。
+- 同档多轮（`{archive}-r0/r1…`）素材追加到同一 store，评估与成稿跑在整档上。
+- 停止条件：评估就绪 / 轮次用尽 / 某轮零产出；复核清单随成稿交付人工审核。
+
+详见 [编排层设计文档](docs/orchestration-design.md)。
 
 ## Phase 1：初次访谈 Agent（LangGraph）
 
@@ -58,7 +77,7 @@ MySQL 素材 → gather 摘要 → assess 打分找缺口 → plan 追问 → va
 ```
 
 - 四个维度打分：话题覆盖 / 时间线完整 / 人物丰满度 / 细节情感。
-- 每个缺口绑定 Phase 1 话题 id，直接成为下一轮补访提纲（缺口 → 回 Phase 1）。
+- 每个缺口绑定 Phase 1 话题 id，直接成为下一轮补访提纲。
 
 详见 [Phase 3 设计文档](docs/phase3-assessment-design.md)。
 
@@ -82,18 +101,14 @@ pip install -r requirements.txt
 # 跑测试（标准库 unittest；MySQL 测试需设 TMS_MYSQL_URL，否则跳过）
 PYTHONPATH=src python3 -m unittest discover -s tests
 
-# Phase 1 模拟访谈 / 交互访谈
-PYTHONPATH=src python3 examples/simulated_interview.py
-PYTHONPATH=src python3 examples/demo_interview.py
+# 一键跑完整本回忆录工程（访谈 ↔ 写作协作到成稿）
+PYTHONPATH=src python3 examples/memoir_demo.py
 
-# Phase 2 演示：访谈 → 素材处理 → 打印图谱 + 混合检索
-PYTHONPATH=src python3 examples/phase2_demo.py
-
-# Phase 3 演示：访谈 → 素材处理 → 写作评估 → 补充访谈提纲
-PYTHONPATH=src python3 examples/phase3_demo.py
-
-# Phase 4 演示：访谈 → 素材处理 → 评估 → 初稿生成（含回检与复核清单）
-PYTHONPATH=src python3 examples/phase4_demo.py
+# 各阶段演示
+PYTHONPATH=src python3 examples/simulated_interview.py  # Phase 1 模拟访谈
+PYTHONPATH=src python3 examples/phase2_demo.py          # Phase 2 素材处理
+PYTHONPATH=src python3 examples/phase3_demo.py          # Phase 3 写作评估
+PYTHONPATH=src python3 examples/phase4_demo.py          # Phase 4 初稿生成
 
 # 接真模型（可选，不设则用离线 Demo 实现）
 export TMS_LLM_BASE_URL="https://api.deepseek.com/v1"
@@ -105,32 +120,16 @@ export TMS_MYSQL_URL="mysql://root:pass@127.0.0.1:3306/timememory"  # 生产库
 ## 最小代码示例
 
 ```python
-from timememory.interview import InterviewAgent, ElderProfile
-from timememory.material import run_material_pipeline
-from timememory.assessment import run_assessment, render_brief
-from timememory.drafting import run_drafting
+from timememory.interview import ElderProfile
+from timememory.orchestration import run_memoir, render_memoir_report
 
-# Phase 1：访谈
-agent = InterviewAgent(elder=ElderProfile(name="张爷爷"))
-print(agent.start().text)
-while True:
-    reply = agent.step(input("老人："))
-    print(f"[{reply.decision.action}] {reply.text}")
-    if reply.session_ended:
-        break
-
-# Phase 2：素材处理
-result = run_material_pipeline(agent.session_id, agent.fragments_json())
-
-# Phase 3：写作评估 → 缺口回 Phase 1 补访
-out3 = run_assessment(result["store"], agent.session_id)
-print(render_brief(out3["assessment"], out3["plan"]))
-
-# Phase 4：初稿生成 → 复核清单交 Phase 5 人工审核
-out4 = run_drafting(result["store"], agent.session_id,
-                    elder={"name": "张爷爷"}, birth_year=1953,
-                    assessment=out3["assessment"])
-print(out4["manuscript"])
+# 编排层一键成书：访谈 ↔ 写作协作到就绪，然后成稿
+result = run_memoir(
+    elder=ElderProfile(name="张爷爷", age=82, hometown="四川合川"),
+    answer_fn=lambda q, r, t: input(f"[第{r+1}轮] {q}\n老人："),
+    birth_year=1953, max_rounds=3)
+print(render_memoir_report(result))  # 轮次 + 评估 + 复核清单
+print(result["manuscript"])          # 初稿全文 → 交 Phase 5 人工审核
 ```
 
 ## 目录结构
@@ -140,8 +139,9 @@ src/timememory/
 ├── interview/     Phase 1：访谈 Agent（router/ask/human/extract/validate/fix/record/closing）
 ├── material/      Phase 2：素材处理（clean/embed/extract_kg/persist + 混合检索）
 ├── assessment/    Phase 3：写作评估（gather/assess/plan/validate + 访谈提纲）
-└── drafting/      Phase 4：初稿生成（stages/outline/write ⇄ check/polish/render）
+├── drafting/      Phase 4：初稿生成（stages/outline/write ⇄ check/polish/render）
+└── orchestration/ 编排层（interview → material → assess ⇄ interview … → draft）
 docs/                       设计文档
 tests/                      单元测试（unittest）
-examples/                   各阶段演示脚本
+examples/                   演示脚本（一键成书 + 各阶段）
 ```

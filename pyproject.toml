@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "timememory"
-version = "0.4.0"
-description = "TimeMemorySystem: 为老人书写人生回忆录的多智能体系统（访谈+素材+评估+初稿）"
+version = "0.5.0"
+description = "TimeMemorySystem: 为老人书写人生回忆录的多智能体系统（访谈↔写作协作+初稿生成）"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [

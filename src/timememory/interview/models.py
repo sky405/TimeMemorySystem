@@ -124,4 +124,5 @@ class InterviewState(TypedDict, total=False):
     pending_question: str
     last_reply: str  # 本轮对老人说的话（提问或收尾）
     new_fragments: list[dict]  # 本轮新提交的片段（供 reply 使用）
+    script: list[dict]  # 补访提纲脚本 [{topic_id, question}]，问完即删（编排层注入）
     status: str  # in_progress | ended
