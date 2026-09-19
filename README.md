@@ -15,7 +15,7 @@
 └────────────┬──────────────┘
              ▼
 ┌───────────────────────────┐
-│ Phase 3: 写作评估 ⬜ 规划中 │  分析素材完整度，发现缺口（缺口 → 回到 Phase 1 补充访谈）
+│ Phase 3: 写作评估 ✅ 已实现 │  素材够不够写？缺口 → 回 Phase 1 补充访谈
 └────────────┬──────────────┘
              ▼
      Phase 4 初稿生成 → Phase 5 人工审核 → Phase 6 家族记忆库（RAG 对话）
@@ -47,6 +47,17 @@ Phase 1 片段 → clean 清洗 → embed 向量化 → extract_kg 图谱抽取 
 
 详见 [Phase 2 设计文档](docs/phase2-material-design.md)。
 
+## Phase 3：写作评估
+
+```text
+MySQL 素材 → gather 摘要 → assess 打分找缺口 → plan 追问 → validate 修复 → 补充访谈提纲
+```
+
+- 四个维度打分：话题覆盖 / 时间线完整 / 人物丰满度 / 细节情感。
+- 每个缺口绑定 Phase 1 话题 id，直接成为下一轮补访提纲（缺口 → 回 Phase 1）。
+
+详见 [Phase 3 设计文档](docs/phase3-assessment-design.md)。
+
 ## 快速开始
 
 ```bash
@@ -62,6 +73,9 @@ PYTHONPATH=src python3 examples/demo_interview.py
 # Phase 2 演示：访谈 → 素材处理 → 打印图谱 + 混合检索
 PYTHONPATH=src python3 examples/phase2_demo.py
 
+# Phase 3 演示：访谈 → 素材处理 → 写作评估 → 补充访谈提纲
+PYTHONPATH=src python3 examples/phase3_demo.py
+
 # 接真模型（可选，不设则用离线 Demo 实现）
 export TMS_LLM_BASE_URL="https://api.deepseek.com/v1"
 export TMS_LLM_API_KEY="sk-..." TMS_LLM_MODEL="deepseek-chat"
@@ -74,6 +88,7 @@ export TMS_MYSQL_URL="mysql://root:pass@127.0.0.1:3306/timememory"  # 生产库
 ```python
 from timememory.interview import InterviewAgent, ElderProfile
 from timememory.material import run_material_pipeline, retrieve, get_embedder
+from timememory.assessment import run_assessment, render_brief
 
 # Phase 1：访谈
 agent = InterviewAgent(elder=ElderProfile(name="张爷爷"))
@@ -88,9 +103,9 @@ while True:
 result = run_material_pipeline(agent.session_id, agent.fragments_json())
 print(result["stats"])  # 清洗/向量/节点/边统计
 
-# 混合检索（Phase 6 预演）
-for r in retrieve("王二哥是谁？", result["store"], get_embedder()):
-    print(f"[{r.via} {r.score}] {r.fragment['content']}")
+# Phase 3：写作评估 → 缺口回 Phase 1 补访
+out = run_assessment(result["store"], agent.session_id)
+print(render_brief(out["assessment"], out["plan"]))
 ```
 
 ## 目录结构
@@ -98,7 +113,8 @@ for r in retrieve("王二哥是谁？", result["store"], get_embedder()):
 ```text
 src/timememory/
 ├── interview/     Phase 1：访谈 Agent（router/ask/human/extract/validate/fix/record/closing）
-└── material/      Phase 2：素材处理（clean/embed/extract_kg/persist + 混合检索）
+├── material/      Phase 2：素材处理（clean/embed/extract_kg/persist + 混合检索）
+└── assessment/    Phase 3：写作评估（gather/assess/plan/validate + 访谈提纲）
 docs/                       设计文档
 tests/                      单元测试（unittest）
 examples/                   各阶段演示脚本

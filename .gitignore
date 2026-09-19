@@ -5,3 +5,5 @@ __pycache__/
 .DS_Store
 # 交互式演示的本地产物（不入库，sample_transcript.md 除外）
 examples/interactive_*
+# 本地 SQLite 库（演示/开发默认落盘位置）
+data/
