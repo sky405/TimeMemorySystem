@@ -54,11 +54,17 @@ class InterviewLLM(Protocol):
 class LangChainInterviewLLM:
     name = "langchain"
 
-    def __init__(self, model=None, temperature: float = 0.3):
+    def __init__(self, model=None, temperature: float | None = None):
+        from ..config import get_config
+        cfg = get_config()
+        if temperature is None:
+            temperature = cfg.interview.temperature
+        if temperature is None:
+            temperature = 0.3
         self.model = model or ChatOpenAI(
-            model=os.getenv("TMS_LLM_MODEL", "gpt-4o-mini"),
-            base_url=os.getenv("TMS_LLM_BASE_URL") or None,
-            api_key=os.getenv("TMS_LLM_API_KEY", ""),
+            model=cfg.llm.model or "gpt-4o-mini",
+            base_url=cfg.llm.base_url,
+            api_key=cfg.llm.api_key or "",
             temperature=temperature,
         )
 
@@ -292,9 +298,11 @@ class DemoInterviewLLM:
 
 def get_llm() -> InterviewLLM:
     """有 Key 用真模型，无 Key 降级 Demo。"""
-    if os.getenv("TMS_LLM_API_KEY"):
-        model = os.getenv("TMS_LLM_MODEL", "gpt-4o-mini")
-        base = os.getenv("TMS_LLM_BASE_URL", "https://api.openai.com/v1")
+    from ..config import get_config
+    cfg = get_config().llm
+    if cfg.api_key:
+        model = cfg.model or "gpt-4o-mini"
+        base = cfg.base_url or "https://api.openai.com/v1"
         print(f"[TimeMemory] 使用真模型：{model}（{base}）")
         return LangChainInterviewLLM()
     print("[TimeMemory] 未检测到 TMS_LLM_API_KEY，使用 DemoInterviewLLM（离线确定性）")

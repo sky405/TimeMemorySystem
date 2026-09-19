@@ -34,10 +34,13 @@ class OpenAIEmbedder:
     def __init__(self, model=None):
         if model is None:
             from langchain_openai import OpenAIEmbeddings
+
+            from ..config import get_config
+            cfg = get_config()
             model = OpenAIEmbeddings(
-                model=os.getenv("TMS_EMB_MODEL", "text-embedding-3-small"),
-                base_url=os.getenv("TMS_EMB_BASE_URL") or os.getenv("TMS_LLM_BASE_URL") or None,
-                api_key=os.getenv("TMS_EMB_API_KEY", ""),
+                model=cfg.embedding.model,
+                base_url=cfg.embedding.base_url or cfg.llm.base_url,
+                api_key=cfg.embedding.api_key or "",
             )
         self.model = model
 
@@ -72,8 +75,10 @@ class DemoEmbedder:
 
 
 def get_embedder() -> Embedder:
-    if os.getenv("TMS_EMB_API_KEY"):
-        print(f"[TimeMemory] 向量化：真模型 {os.getenv('TMS_EMB_MODEL', 'text-embedding-3-small')}")
+    from ..config import get_config
+    cfg = get_config()
+    if cfg.embedding.api_key:
+        print(f"[TimeMemory] 向量化：真模型 {cfg.embedding.model}")
         return OpenAIEmbedder()
     print("[TimeMemory] 向量化：Demo 实现（离线确定性；设 TMS_EMB_API_KEY 可切真模型）")
     return DemoEmbedder()

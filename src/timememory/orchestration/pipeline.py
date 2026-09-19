@@ -180,7 +180,7 @@ def _elder_dict(elder: Any) -> dict:
 
 
 def run_memoir(elder: Any = None, answer_fn: Callable[[str, int, int], str] | None = None,
-               birth_year: int | None = None, max_rounds: int = 3,
+               birth_year: int | None = None, max_rounds: int | None = None,
                archive_id: str | None = None, store: MaterialStore | None = None,
                interview_llm=None, material_llm=None, embedder=None,
                assess_llm=None, draft_llm=None) -> dict[str, Any]:
@@ -199,6 +199,9 @@ def run_memoir(elder: Any = None, answer_fn: Callable[[str, int, int], str] | No
                       "embedder": embedder or get_embedder(),
                       "assess_llm": assess_llm or get_assessment_llm(),
                       "draft_llm": draft_llm or get_drafting_llm()}
+    if max_rounds is None:
+        from ..config import get_config
+        max_rounds = get_config().orchestration.max_rounds
     cfg = {"configurable": {"thread_id": archive, "deps_id": deps_id}}
     try:
         out = build_conductor_graph().invoke({

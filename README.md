@@ -123,6 +123,27 @@ MySQL 素材 → gather 摘要 → assess 打分找缺口 → plan 追问 → va
 
 详见 [Phase 6 设计文档](docs/library-design.md)。
 
+## 统一配置
+
+所有配置集中在 `timememory.yaml`（复制示例改名即用），优先级：**显式传参 > 环境变量 > YAML > 默认值**。
+API Key 等密钥建议走环境变量，别写进文件。
+
+```bash
+cp timememory.yaml.example timememory.yaml
+```
+
+```yaml
+llm: {base_url, model, api_key}   # 各阶段共用；无 api_key 用 Demo（TMS_LLM_* 覆盖）
+embedding: {base_url, model, api_key}  # TMS_EMB_* 覆盖
+mysql: {url, host, port, user, password, database}  # TMS_MYSQL_* 覆盖；不填用 SQLite
+sqlite: {path}                    # TMS_SQLITE_PATH 覆盖
+interview/material/assessment/drafting/review: {temperature}
+library: {temperature, threshold, top_k}
+orchestration: {max_rounds}
+```
+
+`TMS_CONFIG` 可指定其它位置的配置文件；找不到文件时静默用默认值 + 环境变量。
+
 ## 快速开始
 
 ```bash

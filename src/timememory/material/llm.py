@@ -23,11 +23,17 @@ class MaterialLLM(Protocol):
     def extract_kg(self, fragment: CleanFragment) -> KGExtraction: ...
 
 
-def build_chat_model(temperature: float = 0.2) -> ChatOpenAI:
+def build_chat_model(temperature: float | None = None) -> ChatOpenAI:
+    from ..config import get_config
+    cfg = get_config()
+    if temperature is None:
+        temperature = cfg.material.temperature
+    if temperature is None:
+        temperature = 0.2
     return ChatOpenAI(
-        model=os.getenv("TMS_LLM_MODEL", "gpt-4o-mini"),
-        base_url=os.getenv("TMS_LLM_BASE_URL") or None,
-        api_key=os.getenv("TMS_LLM_API_KEY", ""),
+        model=cfg.llm.model or "gpt-4o-mini",
+        base_url=cfg.llm.base_url,
+        api_key=cfg.llm.api_key or "",
         temperature=temperature,
     )
 
@@ -82,8 +88,10 @@ class DemoMaterialLLM:
 
 
 def get_material_llm() -> MaterialLLM:
-    if os.getenv("TMS_LLM_API_KEY"):
-        print(f"[TimeMemory] Phase 2 LLM：真模型 {os.getenv('TMS_LLM_MODEL', 'gpt-4o-mini')}")
+    from ..config import get_config
+    cfg = get_config().llm
+    if cfg.api_key:
+        print(f"[TimeMemory] Phase 2 LLM：真模型 {cfg.model or 'gpt-4o-mini'}")
         return LangChainMaterialLLM()
     print("[TimeMemory] Phase 2 LLM：Demo 实现（离线确定性）")
     return DemoMaterialLLM()

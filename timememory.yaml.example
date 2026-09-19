@@ -1,0 +1,46 @@
+# TimeMemorySystem 统一配置示例
+# 用法：cp timememory.yaml.example timememory.yaml 后按需修改。
+# 优先级：显式传参 > 环境变量 > 本文件 > 默认值。
+# API Key 等密钥建议走环境变量（TMS_LLM_API_KEY / TMS_EMB_API_KEY），别写进文件。
+
+# 大模型（OpenAI 兼容接口，各阶段共用；无 api_key 则各阶段用 Demo 实现）
+llm:
+  base_url: https://api.deepseek.com/v1
+  model: deepseek-chat
+  api_key: ''  # 留空，用环境变量 TMS_LLM_API_KEY
+
+# 向量化（无 api_key 则用 Demo 向量；base_url 留空复用 llm.base_url）
+embedding:
+  base_url: ''
+  model: text-embedding-3-small
+  api_key: ''  # 或环境变量 TMS_EMB_API_KEY
+
+# MySQL 生产库（url 与 host 二选一填；都不填则用 SQLite）
+mysql:
+  url: ''  # 如 mysql://root:pass@127.0.0.1:3306/timememory，或环境变量 TMS_MYSQL_URL
+  # host: 127.0.0.1
+  # port: 3306
+  # user: root
+  # password: ''
+  # database: timememory
+
+# SQLite 本地/测试库
+sqlite:
+  path: data/material.db  # 或环境变量 TMS_SQLITE_PATH；':memory:' 用于测试
+
+# 各阶段 temperature（留空 null 则用原来的默认值）
+interview: {temperature: null}
+material: {temperature: null}
+assessment: {temperature: null}
+drafting: {temperature: null}
+review: {temperature: null}
+
+# Phase 6 记忆库问答
+library:
+  temperature: null
+  threshold: 0.15  # 检索门控：最高分低于此值则拒答
+  top_k: 4
+
+# 编排层
+orchestration:
+  max_rounds: 3

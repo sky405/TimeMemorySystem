@@ -20,13 +20,19 @@ class ReviewLLM(Protocol):
 
 class LangChainReviewLLM:
     def __init__(self, model: str | None = None, base_url: str | None = None,
-                 api_key: str | None = None, temperature: float = 0.2):
+                 api_key: str | None = None, temperature: float | None = None):
         from langchain_openai import ChatOpenAI
 
+        from ..config import get_config
+        cfg = get_config()
+        if temperature is None:
+            temperature = cfg.review.temperature
+        if temperature is None:
+            temperature = 0.2
         self.chat = ChatOpenAI(
-            model=model or os.environ.get("TMS_LLM_MODEL", "deepseek-chat"),
-            base_url=base_url or os.environ.get("TMS_LLM_BASE_URL"),
-            api_key=api_key or os.environ.get("TMS_LLM_API_KEY"),
+            model=model or cfg.llm.model or "deepseek-chat",
+            base_url=base_url or cfg.llm.base_url,
+            api_key=api_key or cfg.llm.api_key,
             temperature=temperature,
         )
 
@@ -49,7 +55,9 @@ class DemoReviewLLM:
 
 
 def get_review_llm() -> ReviewLLM:
-    if os.environ.get("TMS_LLM_API_KEY"):
+    from ..config import get_config
+    cfg = get_config().llm
+    if cfg.api_key:
         print("[TimeMemory] Phase 5 使用真模型提修订建议")
         return LangChainReviewLLM()
     print("[TimeMemory] Phase 5 使用 Demo 修订建议（离线）")

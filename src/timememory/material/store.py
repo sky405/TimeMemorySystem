@@ -221,9 +221,11 @@ def connect_mysql(host: str, port: int, user: str, password: str, database: str)
 
 
 def get_db() -> DB:
-    """按环境变量连接：优先 MySQL，否则 SQLite。"""
-    url = os.getenv("TMS_MYSQL_URL", "")
-    host = os.getenv("TMS_MYSQL_HOST", "")
+    """按统一配置连接：优先 MySQL，否则 SQLite。"""
+    from ..config import get_config
+    cfg = get_config()
+    url = cfg.mysql.url or ""
+    host = cfg.mysql.host or ""
     if url or host:
         if url:
             u = urlparse(url)
@@ -233,13 +235,13 @@ def get_db() -> DB:
             password = unquote(u.password or "")
             database = (u.path or "/timememory").lstrip("/")
         else:
-            port = int(os.getenv("TMS_MYSQL_PORT", "3306"))
-            user = os.getenv("TMS_MYSQL_USER", "root")
-            password = os.getenv("TMS_MYSQL_PASSWORD", "")
-            database = os.getenv("TMS_MYSQL_DB", "timememory")
+            port = cfg.mysql.port
+            user = cfg.mysql.user
+            password = cfg.mysql.password
+            database = cfg.mysql.database
         print(f"[TimeMemory] Phase 2 存储：MySQL {user}@{host}:{port}/{database}")
         return connect_mysql(host, port, user, password, database)
-    path = os.getenv("TMS_SQLITE_PATH", "data/material.db")
+    path = cfg.sqlite.path
     print(f"[TimeMemory] Phase 2 存储：SQLite {path}（设 TMS_MYSQL_URL 可切 MySQL）")
     return connect_sqlite(path)
 

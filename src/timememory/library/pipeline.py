@@ -101,13 +101,15 @@ class ChatSession:
 
     def __init__(self, store: MaterialStore, embedder: Embedder | None = None,
                  llm: LibraryLLM | None = None, cautions: list[dict] | None = None,
-                 threshold: float = 0.15, top_k: int = 4):
+                 threshold: float | None = None, top_k: int | None = None):
+        from ..config import get_config
+        tuning = get_config().library
         self.store = store
         self.embedder = embedder or get_embedder()
         self.llm = llm or get_library_llm()
         self.cautions = [dict(c) for c in (cautions or [])]
-        self.threshold = threshold
-        self.top_k = top_k
+        self.threshold = tuning.threshold if threshold is None else threshold
+        self.top_k = tuning.top_k if top_k is None else top_k
         self.history: list[dict] = []
         self._graph = build_library_graph(store, self.embedder, self.llm)
 

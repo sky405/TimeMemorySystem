@@ -3,6 +3,7 @@ langgraph>=1.0
 langchain-core>=1.0
 langchain-openai>=1.0
 pydantic>=2.0
-pymysql>=1.1  # Phase 2 MySQL 生产后端（测试/本地用标准库 SQLite）
+pymysql>=1.1
+pyyaml>=6.0  # 统一配置文件 timememory.yaml  # Phase 2 MySQL 生产后端（测试/本地用标准库 SQLite）
 
 # 测试使用标准库 unittest：PYTHONPATH=src python3 -m unittest discover -s tests
