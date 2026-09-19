@@ -1,7 +1,8 @@
-# TimeMemorySystem Phase 1（LangGraph 版）依赖
+# TimeMemorySystem 依赖
 langgraph>=1.0
 langchain-core>=1.0
 langchain-openai>=1.0
 pydantic>=2.0
+pymysql>=1.1  # Phase 2 MySQL 生产后端（测试/本地用标准库 SQLite）
 
 # 测试使用标准库 unittest：PYTHONPATH=src python3 -m unittest discover -s tests
