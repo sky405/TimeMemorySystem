@@ -1,148 +1,127 @@
-"""访谈 Agent 数据模型（纯标准库，无第三方依赖）。"""
+"""数据模型：pydantic 结构化输出 schema + LangGraph 状态定义。
+
+设计原则：判断交给 LLM（经由这些 schema 做结构化输出），
+本文件只定义"形状"，不包含任何判断逻辑。
+"""
 from __future__ import annotations
 
-import time
-import uuid
+import operator
 from dataclasses import dataclass, field
-from enum import Enum
+from typing import Annotated, Literal, TypedDict
+
+from pydantic import BaseModel, Field
+
+RouteAction = Literal["followup", "switch", "wrap"]
 
 
-class Speaker(str, Enum):
-    AI = "ai"
-    ELDER = "elder"
-    SYSTEM = "system"
-
-
-class SessionStatus(str, Enum):
-    OPENING = "opening"
-    IN_PROGRESS = "in_progress"
-    CLOSING = "closing"
-    ENDED = "ended"
-
-
-class DecisionAction(str, Enum):
-    """三叉路口的三个分支。"""
-
-    DEEP_DIVE = "deep_dive"  # 分支 A：发现好故事，深度追问
-    SWITCH_TOPIC = "switch_topic"  # 分支 B：话题聊干了，切换新话题
-    WRAP_UP = "wrap_up"  # 分支 C：老人累了/要走，收尾结束
-
-
+# ----------------------------------------------------------------------------
+# 访谈领域模型
+# ----------------------------------------------------------------------------
 @dataclass
 class Topic:
-    """人生话题。"""
-
     id: str
     name: str
     description: str
-    opening_questions: list[str]
-    followup_angles: list[str]
-    keywords: list[str]
-    min_turns: int = 2
-    max_turns: int = 6
-    priority: int = 50
-    sensitive: bool = False
+    opening_questions: list[str] = field(default_factory=list)
 
 
 @dataclass
 class ElderProfile:
-    """老人基本信息（注册时由家属填写）。"""
-
     name: str = "老人家"
     age: int | None = None
-    gender: str = ""
     hometown: str = ""
-    dialect: str = ""
-    health_notes: str = ""
     known_facts: list[str] = field(default_factory=list)
 
 
 @dataclass
-class Message:
-    speaker: Speaker
-    text: str
-    topic_id: str = ""
-    turn_index: int = 0
-    timestamp: float = field(default_factory=time.time)
-
-
-@dataclass
-class MemoryFragment:
-    """从老人回答中提取的结构化记忆片段（交给 Phase 2/3 的核心产出）。"""
-
-    id: str
-    content: str
-    topic_id: str
-    source_turn: int
-    time_refs: list[str] = field(default_factory=list)
-    place_refs: list[str] = field(default_factory=list)
-    person_refs: list[str] = field(default_factory=list)
-    emotion: str = ""
-    importance: int = 3  # 1~5
-    entities: list[str] = field(default_factory=list)
-    needs_followup: bool = False
-    followup_hint: str = ""
-
-
-@dataclass
-class Decision:
-    """三叉路口决策结果。"""
-
-    action: DecisionAction
-    confidence: float
-    reasoning: str
-    signals: dict = field(default_factory=dict)
-    focus: str = ""  # DEEP_DIVE=追问焦点实体；SWITCH_TOPIC=新话题 id；WRAP_UP=收尾原因
-
-
-@dataclass
 class AgentConfig:
-    """Agent 可调参数。"""
-
-    # 轮次控制
-    max_total_turns: int = 30  # 单次访谈老人回答轮次硬上限（红线）
-    soft_total_turns: int = 24  # 软上限：接近时 fatigue 爬升
-    # 决策阈值
-    fatigue_wrap_threshold: float = 0.75
-    exhaustion_switch_hard: float = 0.85  # 极高枯竭：即使没聊够 min_turns 也切换
-    exhaustion_switch_soft: float = 0.60
-    story_dive_threshold: float = 0.35
-    # 提问
-    max_questions_per_turn: int = 1  # 铁律：一次只问一个问题
-    # LLM
-    use_llm_judge: bool = True  # 是否启用 LLM 裁判（第 3 层）
-    use_llm_polish: bool = True  # 是否用 LLM 润色提问
-    llm_weight: float = 0.4  # 融合时 LLM 投票权重
-    # 敏感话题
-    sensitive_min_turns: int = 8  # 访谈满 N 轮后才允许切入敏感话题
+    max_total_turns: int = 30  # 预算护栏：只管"聊多久"，不管"怎么聊"
+    max_fix_retries: int = 2  # 抽取→验证失败后的修复重试次数
+    llm_validate: bool = True  # 验证器是否启用 LLM 合理性检查
     first_topic_id: str = "childhood"
+    recent_window: int = 6  # 路由时回看最近几轮对话
+
+
+# ----------------------------------------------------------------------------
+# LLM 结构化输出 schema（同时是验证器的输入）
+# ----------------------------------------------------------------------------
+class MemoryFragment(BaseModel):
+    """一条有效记忆片段。content 尽量用老人原话，不改写。"""
+
+    content: str = Field(description="记忆内容原文")
+    time_refs: list[str] = Field(default_factory=list, description="时间表达，如 1962年/9岁/小时候")
+    place_refs: list[str] = Field(default_factory=list, description="地点表达，如 嘉陵江/合川县")
+    person_refs: list[str] = Field(default_factory=list, description="人物表达，如 邻居王二哥/我娘")
+    emotion: str = Field(default="", description="情感：开心/怀念/难过/害怕/骄傲/愤怒/平静，无则空")
+    importance: int = Field(default=3, ge=1, le=5, description="故事价值 1~5")
+    needs_followup: bool = Field(default=False, description="是否值得追问")
+    topic_id: str = Field(default="", description="所属话题，由 record 节点盖章")
+    source_turn: int = Field(default=0, description="来源轮次，由 record 节点盖章")
+
+
+class FragmentBatch(BaseModel):
+    fragments: list[MemoryFragment] = Field(default_factory=list)
+
+
+class RouteDecision(BaseModel):
+    """三叉路口决策：全部由 LLM 做出。"""
+
+    action: RouteAction = Field(description="followup 深挖 / switch 切换话题 / wrap 收尾")
+    reasoning: str = Field(description="一句话中文理由")
+    focus: str = Field(default="", description="followup 追问焦点；switch 可空")
+    next_topic_id: str = Field(default="", description="switch 的新话题 id（须在候选内）")
+    prev_topic_id: str = Field(default="", description="switch 时的老话题 id（过渡用，由程序回填）")
+
+
+class PlausibilityVerdict(BaseModel):
+    valid: bool = Field(description="该片段是否为一条真实有效的记忆")
+    reason: str = Field(default="", description="理由")
+
+
+# ----------------------------------------------------------------------------
+# 传给 LLM 的上下文（纯数据，由 graph 组装）
+# ----------------------------------------------------------------------------
+@dataclass
+class RouteContext:
+    elder_name: str
+    current_topic: Topic
+    topic_turns_current: int
+    turn_count: int
+    max_turns: int
+    covered_names: list[str]
+    uncovered: list[Topic]  # 可切换的候选话题
+    recent_qa: list[tuple[str, str]]  # [(AI提问, 老人回答)]
+    last_answer: str
 
 
 @dataclass
-class InterviewState:
-    """整场访谈的可序列化状态。"""
+class ClosingContext:
+    elder_name: str
+    highlights: list[str]
+    n_topics: int
+    n_fragments: int
 
-    session_id: str = field(default_factory=lambda: f"iv-{uuid.uuid4().hex[:8]}")
-    elder: ElderProfile = field(default_factory=ElderProfile)
-    config: AgentConfig = field(default_factory=AgentConfig)
-    status: SessionStatus = SessionStatus.OPENING
-    current_topic_id: str = ""
-    turn_count: int = 0  # 老人已回答的总轮数
-    topic_turn_count: int = 0  # 当前话题已聊轮数
-    covered_topic_ids: list[str] = field(default_factory=list)
-    topic_turns: dict[str, int] = field(default_factory=dict)  # 各话题累计轮数
-    messages: list[Message] = field(default_factory=list)
-    fragments: list[MemoryFragment] = field(default_factory=list)
-    expanded_entities: list[str] = field(default_factory=list)  # 已追问过的实体
-    short_reply_streak: int = 0  # 连续极短回复计数
-    decisions: list[Decision] = field(default_factory=list)
 
-    def elder_messages(self) -> list[Message]:
-        return [m for m in self.messages if m.speaker == Speaker.ELDER]
-
-    def last_elder_text(self) -> str:
-        msgs = self.elder_messages()
-        return msgs[-1].text if msgs else ""
-
-    def fragments_of(self, topic_id: str) -> list[MemoryFragment]:
-        return [f for f in self.fragments if f.topic_id == topic_id]
+# ----------------------------------------------------------------------------
+# LangGraph 状态
+# ----------------------------------------------------------------------------
+class InterviewState(TypedDict, total=False):
+    elder: dict
+    config: dict
+    messages: Annotated[list[dict], operator.add]  # {role: ai/elder, text, topic, turn}
+    trail: Annotated[list[dict], operator.add]  # 每轮路由决策轨迹
+    fragments: Annotated[list[dict], operator.add]  # 已提交的有效片段
+    covered_topic_ids: Annotated[list[str], operator.add]
+    current_topic_id: str
+    turn_count: int
+    topic_turns: dict[str, int]
+    candidates: list[dict]  # 本轮抽取候选
+    validation: dict  # {"valid": [...], "rejected": [{"content":..., "reasons":[...]}]}
+    last_rejected: list[dict]  # 上轮被驳回的候选（record 回填，便于观察验证器）
+    feedback: str  # 修复反馈
+    retries: int
+    decision: dict
+    pending_question: str
+    last_reply: str  # 本轮对老人说的话（提问或收尾）
+    new_fragments: list[dict]  # 本轮新提交的片段（供 reply 使用）
+    status: str  # in_progress | ended

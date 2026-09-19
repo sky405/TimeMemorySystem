@@ -7,7 +7,7 @@
         │
         ▼
 ┌───────────────────────────┐
-│ Phase 1: 初次访谈 ✅ 已实现 │  访谈 Agent 与老人对话，提取初始记忆片段
+│ Phase 1: 初次访谈 ✅ 已实现 │  LangGraph 访谈 Agent，产出有效记忆片段
 └────────────┬──────────────┘
              ▼
 ┌───────────────────────────┐
@@ -21,33 +21,40 @@
      Phase 4 初稿生成 → Phase 5 人工审核 → Phase 6 家族记忆库（RAG 对话）
 ```
 
-## Phase 1：初次访谈 Agent
+## Phase 1：初次访谈 Agent（LangGraph）
 
-核心循环（详见 [设计文档](docs/phase1-interview-agent-design.md)）：
+设计原则：**判断交给 LLM，流程交给图，质量交给验证器。**
 
 ```text
-[1. 确定当前话题] → [2. AI 提问] → [3. 老人回答] → [4. 三叉路口决策]
-                                                        ├── A: 发现好故事 → 深度追问 → 回 [3]
-                                                        ├── B: 话题聊干了 → 切换话题 → 回 [1]
-                                                        └── C: 老人累了 → 收尾总结 → 结束
+START → router → (ask → human → extract → validate → record) ↺
+          │                                              │
+          └──────────────→ closing → END                 │
+                               ↑                         │
+                    fix → extract（验证失败修复环）────────┘
 ```
 
-**特点**：零第三方依赖（纯标准库）；离线可跑（Mock LLM + 规则兜底）；有 Key 自动切真模型
-（OpenAI / DeepSeek / 通义千问 / 本地 Ollama，OpenAI 协议）。
+- **router**：三叉路口决策（A 深挖 / B 切换 / C 收尾），LLM 结构化输出。
+- **extract → validate → fix**：ReAct 式抽取循环，验证器（schema/模糊/重复/LLM 质检）
+  不合格就带反馈修复，直到产出有效记忆片段。
+- **人工规则只剩两处**：告别安全护栏 + 轮次预算护栏。
+
+详见 [设计文档](docs/phase1-interview-agent-design.md)。
 
 ## 快速开始
 
 ```bash
-# 1. 跑测试（38 个，标准库 unittest）
+pip install -r requirements.txt
+
+# 跑测试（标准库 unittest）
 PYTHONPATH=src python3 -m unittest discover -s tests
 
-# 2. 看模拟访谈演示（含 A/B/C 三分支 + 完整度报告 + 逐字稿）
+# 模拟访谈演示（含 A/B/C 三分支 + 验证器驳回展示 + 完整度报告 + 逐字稿）
 PYTHONPATH=src python3 examples/simulated_interview.py
 
-# 3. 亲自扮演老人，和 Agent 聊天
+# 亲自扮演老人，和 Agent 聊天
 PYTHONPATH=src python3 examples/demo_interview.py
 
-# 4. 接真模型（可选，不设则用 Mock）
+# 接真模型（可选，不设则用离线 Demo 实现）
 export TMS_LLM_BASE_URL="https://api.deepseek.com/v1"
 export TMS_LLM_API_KEY="sk-..."
 export TMS_LLM_MODEL="deepseek-chat"
@@ -62,13 +69,13 @@ agent = InterviewAgent(elder=ElderProfile(name="张爷爷", age=82, hometown="�
 print(agent.start().text)                       # 开场白 + 首个问题
 
 while True:
-    reply = agent.step(input("老人："))          # 老人回答 → 决策 → 下一句
-    print(f"[{reply.decision.action.value}] {reply.text}")
+    reply = agent.step(input("老人："))          # 老人回答 → 图运转 → 下一句
+    print(f"[{reply.decision.action}] {reply.text}")
     if reply.session_ended:
         break
 
 print(agent.coverage_report())                  # → Phase 3：素材完整度报告
-print(agent.fragments_json())                   # → Phase 2：记忆片段
+print(agent.fragments_json())                   # → Phase 2：有效记忆片段
 print(agent.export_transcript_markdown())       # → Phase 5：逐字稿
 ```
 
@@ -76,17 +83,14 @@ print(agent.export_transcript_markdown())       # → Phase 5：逐字稿
 
 ```text
 src/timememory/interview/   Phase 1 核心包
-├── models.py      数据模型（话题/消息/记忆片段/决策/会话状态）
-├── topics.py      人生九话题库 + 搭桥式话题规划器
-├── decision.py    三叉路口决策引擎（硬规则 → 特征分 → LLM 裁判）
-├── extractor.py   记忆片段提取（规则打底 + LLM 精修）
-├── questions.py   提问生成（开场/五板斧追问/过渡/收尾，一次只问一个问题）
-├── llm.py         LLM 抽象（Mock + OpenAI 协议，标准库 urllib）
+├── models.py      pydantic schema（片段/决策/质检）+ 图状态
+├── topics.py      人生九话题（纯数据）
 ├── prompts.py     全部中文提示词
-├── agent.py       编排器（状态机 + 对外 API）
-├── session.py     会话 JSON 持久化（中途离开可恢复）
-└── report.py      Phase 3 交接（完整度报告 + 缺口 + 下次访谈计划）
+├── llm.py         InterviewLLM 协议 + LangChain 真模型 + Demo 离线实现
+├── validators.py  片段验证器 + 告别安全护栏
+├── graph.py       StateGraph（router/ask/human/extract/validate/fix/record/closing）
+└── agent.py       薄封装（start/step/报告/逐字稿/会话快照）
 docs/                       设计文档
-tests/                      单元测试（unittest，零依赖）
+tests/                      单元测试（unittest）
 examples/                   模拟演示 + 交互式 CLI + 逐字稿示例
 ```

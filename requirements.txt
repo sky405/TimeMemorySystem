@@ -1,5 +1,7 @@
-# 核心包零第三方依赖（仅 Python 标准库），无需安装任何包即可运行。
+# TimeMemorySystem Phase 1（LangGraph 版）依赖
+langgraph>=1.0
+langchain-core>=1.0
+langchain-openai>=1.0
+pydantic>=2.0
+
 # 测试使用标准库 unittest：PYTHONPATH=src python3 -m unittest discover -s tests
-#
-# 可选（仅当你想用 pytest 运行测试时）：
-#   pip install pytest

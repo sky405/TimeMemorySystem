@@ -4,11 +4,16 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "timememory"
-version = "0.1.0"
-description = "TimeMemorySystem: 为老人书写人生回忆录的多智能体系统（Phase 1 初次访谈 Agent）"
+version = "0.2.0"
+description = "TimeMemorySystem: 为老人书写人生回忆录的多智能体系统（Phase 1 LangGraph 访谈 Agent）"
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = []  # 核心包零第三方依赖（仅标准库）
+dependencies = [
+    "langgraph>=1.0",
+    "langchain-core>=1.0",
+    "langchain-openai>=1.0",
+    "pydantic>=2.0",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]

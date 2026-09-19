@@ -1,43 +1,45 @@
-"""Phase 1 初次访谈 Agent。
+"""Phase 1 初次访谈 Agent（LangGraph 版）。
 
-核心循环（见 docs/phase1-interview-agent-design.md）：
+    START → router → (ask → human → extract → validate → record) ↺
+              │                                              │
+              └──────────────→ closing → END                 │
+                                   ↑                         │
+                        fix → extract（验证失败修复环）────────┘
 
-    [1. 确定当前话题] → [2. AI 提问] → [3. 老人回答] → [4. 三叉路口决策]
-                                                              ├── A: 深度追问 → 回到 [3]
-                                                              ├── B: 切换话题 → 回到 [1]
-                                                              └── C: 收尾总结 → 结束
+判断交给 LLM，流程交给图，质量交给验证器。
 """
 
+from .agent import AgentReply, InterviewAgent
+from .graph import build_interview_graph
+from .llm import DemoInterviewLLM, LangChainInterviewLLM, get_llm
 from .models import (
     AgentConfig,
-    Decision,
-    DecisionAction,
     ElderProfile,
-    MemoryFragment,
-    Message,
-    SessionStatus,
-    Speaker,
-    Topic,
+    FragmentBatch,
     InterviewState,
+    MemoryFragment,
+    RouteContext,
+    RouteDecision,
+    Topic,
 )
-from .agent import AgentReply, InterviewAgent
-from .llm import LLMClient, MockLLMClient, OpenAICompatibleClient, get_default_client
+from .validators import ValidationReport, is_farewell, validate_fragments
 
 __all__ = [
-    "AgentConfig",
-    "Decision",
-    "DecisionAction",
-    "ElderProfile",
-    "MemoryFragment",
-    "Message",
-    "SessionStatus",
-    "Speaker",
-    "Topic",
-    "InterviewState",
     "AgentReply",
     "InterviewAgent",
-    "LLMClient",
-    "MockLLMClient",
-    "OpenAICompatibleClient",
-    "get_default_client",
+    "build_interview_graph",
+    "DemoInterviewLLM",
+    "LangChainInterviewLLM",
+    "get_llm",
+    "AgentConfig",
+    "ElderProfile",
+    "FragmentBatch",
+    "InterviewState",
+    "MemoryFragment",
+    "RouteContext",
+    "RouteDecision",
+    "Topic",
+    "ValidationReport",
+    "is_farewell",
+    "validate_fragments",
 ]
