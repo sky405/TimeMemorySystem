@@ -1,0 +1,7 @@
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.DS_Store
+# 交互式演示的本地产物（不入库，sample_transcript.md 除外）
+examples/interactive_*

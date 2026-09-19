@@ -1,0 +1,5 @@
+# 核心包零第三方依赖（仅 Python 标准库），无需安装任何包即可运行。
+# 测试使用标准库 unittest：PYTHONPATH=src python3 -m unittest discover -s tests
+#
+# 可选（仅当你想用 pytest 运行测试时）：
+#   pip install pytest
