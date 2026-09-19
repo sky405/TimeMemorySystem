@@ -28,7 +28,11 @@
 │ Phase 4: 初稿生成 ✅ 已实现 │  阶段分组 → 大纲 → 逐章写作 → 事实回检 → 统稿
 └────────────┬──────────────┘
              ▼
-     Phase 5 人工审核 → Phase 6 家族记忆库（RAG 对话）
+┌───────────────────────────┐
+│ Phase 5: 人工审核 ✅ 已实现 │  AI 修订建议 + 人逐条裁决 → 定稿
+└────────────┬──────────────┘
+             ▼
+     Phase 6 家族记忆库（RAG 对话）
 ```
 
 ## 编排层：访谈 ↔ 写作协作
@@ -93,6 +97,18 @@ MySQL 素材 → gather 摘要 → assess 打分找缺口 → plan 追问 → va
 
 详见 [Phase 4 设计文档](docs/phase4-drafting-design.md)。
 
+## Phase 5：人工审核
+
+```text
+初稿+复核清单 → suggest（AI 修订建议）→ human（逐条裁决）→ apply → 定稿
+```
+
+- 每条存疑先看 AI 建议（保留/改写/删除）+ 查证素材，再四选一：确认无误 / 已修正 / 存疑保留 / 删除相关句。
+- 零存疑直接通过；所有裁决写入审核记录附录，原文永久可查。
+- 交互入口：`examples/review_cli.py`（访谈成书 → 逐条裁决 → 定稿落盘）。
+
+详见 [Phase 5 设计文档](docs/review-design.md)。
+
 ## 快速开始
 
 ```bash
@@ -104,11 +120,15 @@ PYTHONPATH=src python3 -m unittest discover -s tests
 # 一键跑完整本回忆录工程（访谈 ↔ 写作协作到成稿）
 PYTHONPATH=src python3 examples/memoir_demo.py
 
+# 交互式审核（访谈成书 → 逐条裁决 → 定稿写入 data/final_book.md）
+PYTHONPATH=src python3 examples/review_cli.py
+
 # 各阶段演示
 PYTHONPATH=src python3 examples/simulated_interview.py  # Phase 1 模拟访谈
 PYTHONPATH=src python3 examples/phase2_demo.py          # Phase 2 素材处理
 PYTHONPATH=src python3 examples/phase3_demo.py          # Phase 3 写作评估
 PYTHONPATH=src python3 examples/phase4_demo.py          # Phase 4 初稿生成
+PYTHONPATH=src python3 examples/review_demo.py          # Phase 5 人工审核
 
 # 接真模型（可选，不设则用离线 Demo 实现）
 export TMS_LLM_BASE_URL="https://api.deepseek.com/v1"
@@ -122,14 +142,22 @@ export TMS_MYSQL_URL="mysql://root:pass@127.0.0.1:3306/timememory"  # 生产库
 ```python
 from timememory.interview import ElderProfile
 from timememory.orchestration import run_memoir, render_memoir_report
+from timememory.review import run_review
 
 # 编排层一键成书：访谈 ↔ 写作协作到就绪，然后成稿
 result = run_memoir(
     elder=ElderProfile(name="张爷爷", age=82, hometown="四川合川"),
     answer_fn=lambda q, r, t: input(f"[第{r+1}轮] {q}\n老人："),
     birth_year=1953, max_rounds=3)
-print(render_memoir_report(result))  # 轮次 + 评估 + 复核清单
-print(result["manuscript"])          # 初稿全文 → 交 Phase 5 人工审核
+print(render_memoir_report(result))
+
+# Phase 5：人工审核 → 定稿
+final = run_review(result["drafts"], result["review"],
+                   [f for f in result["store"].all_fragments()
+                    if f["id"].startswith(result["archive_id"])],
+                   elder={"name": "张爷爷"}, title=result["outline_title"],
+                   reviewer="儿子", decide_fn=lambda v: input(f"{v['item']} 裁决："))
+print(final["book"])
 ```
 
 ## 目录结构
@@ -140,8 +168,9 @@ src/timememory/
 ├── material/      Phase 2：素材处理（clean/embed/extract_kg/persist + 混合检索）
 ├── assessment/    Phase 3：写作评估（gather/assess/plan/validate + 访谈提纲）
 ├── drafting/      Phase 4：初稿生成（stages/outline/write ⇄ check/polish/render）
+├── review/        Phase 5：人工审核（suggest/human/apply + 定稿渲染）
 └── orchestration/ 编排层（interview → material → assess ⇄ interview … → draft）
 docs/                       设计文档
 tests/                      单元测试（unittest）
-examples/                   演示脚本（一键成书 + 各阶段）
+examples/                   演示脚本（一键成书 + 各阶段 + 交互审核）
 ```

@@ -39,6 +39,7 @@ class MemoirState(TypedDict, total=False):
     brief: str
     manuscript: str
     review: list[dict]
+    drafts: list[dict]  # 章节草稿（Phase 5 审核的输入）
     draft_stats: dict
     outline_title: str
     status: str

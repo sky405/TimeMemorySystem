@@ -148,6 +148,7 @@ def draft_node(state: MemoirState, config: RunnableConfig) -> dict:
         status = STATUS_MAX_ROUNDS
     return {"manuscript": out["manuscript"],
             "review": [r.model_dump() for r in out["review"]],
+            "drafts": [d.model_dump() for d in out["drafts"]],
             "draft_stats": out["stats"], "outline_title": out["outline"].title,
             "status": status}
 
@@ -209,6 +210,7 @@ def run_memoir(elder: Any = None, answer_fn: Callable[[str, int, int], str] | No
     return {"archive_id": archive, "status": out["status"], "ready": out["ready"],
             "rounds": out["round_reports"], "brief": out["brief"],
             "manuscript": out["manuscript"], "review": out["review"],
+            "drafts": out["drafts"], "outline_title": out.get("outline_title", ""),
             "material_stats": out.get("material_stats", {}),
             "draft_stats": out.get("draft_stats", {}), "store": store}
 
