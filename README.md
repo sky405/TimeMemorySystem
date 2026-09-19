@@ -32,7 +32,9 @@
 │ Phase 5: 人工审核 ✅ 已实现 │  AI 修订建议 + 人逐条裁决 → 定稿
 └────────────┬──────────────┘
              ▼
-     Phase 6 家族记忆库（RAG 对话）
+┌───────────────────────────┐
+│ Phase 6: 家族记忆库 ✅ 已实现│  定稿入库 + RAG 问答，子孙可检索追问
+└───────────────────────────┘
 ```
 
 ## 编排层：访谈 ↔ 写作协作
@@ -109,6 +111,18 @@ MySQL 素材 → gather 摘要 → assess 打分找缺口 → plan 追问 → va
 
 详见 [Phase 5 设计文档](docs/review-design.md)。
 
+## Phase 6：家族记忆库
+
+```text
+定稿章节 → book 片段入库 → rewrite → retrieve（向量+图谱）→ gate → answer（带出处）
+```
+
+- 定稿与访谈原话统一检索；`存疑保留` 的内容引用时自动标"待考"。
+- 低分宁可拒答（"记忆库里没有找到相关记载"）也不编造。
+- `ChatSession` 持有多轮历史，追问自动消解指代。
+
+详见 [Phase 6 设计文档](docs/library-design.md)。
+
 ## 快速开始
 
 ```bash
@@ -129,6 +143,7 @@ PYTHONPATH=src python3 examples/phase2_demo.py          # Phase 2 素材处理
 PYTHONPATH=src python3 examples/phase3_demo.py          # Phase 3 写作评估
 PYTHONPATH=src python3 examples/phase4_demo.py          # Phase 4 初稿生成
 PYTHONPATH=src python3 examples/review_demo.py          # Phase 5 人工审核
+PYTHONPATH=src python3 examples/library_demo.py         # Phase 6 家族记忆库
 
 # 接真模型（可选，不设则用离线 Demo 实现）
 export TMS_LLM_BASE_URL="https://api.deepseek.com/v1"
@@ -143,6 +158,7 @@ export TMS_MYSQL_URL="mysql://root:pass@127.0.0.1:3306/timememory"  # 生产库
 from timememory.interview import ElderProfile
 from timememory.orchestration import run_memoir, render_memoir_report
 from timememory.review import run_review
+from timememory.library import ChatSession, ingest_book
 
 # 编排层一键成书：访谈 ↔ 写作协作到就绪，然后成稿
 result = run_memoir(
@@ -152,12 +168,17 @@ result = run_memoir(
 print(render_memoir_report(result))
 
 # Phase 5：人工审核 → 定稿
-final = run_review(result["drafts"], result["review"],
-                   [f for f in result["store"].all_fragments()
-                    if f["id"].startswith(result["archive_id"])],
+frags = [f for f in result["store"].all_fragments()
+         if f["id"].startswith(result["archive_id"])]
+final = run_review(result["drafts"], result["review"], frags,
                    elder={"name": "张爷爷"}, title=result["outline_title"],
-                   reviewer="儿子", decide_fn=lambda v: input(f"{v['item']} 裁决："))
-print(final["book"])
+                   reviewer="儿子", decide_fn=...)
+
+# Phase 6：定稿入库 + 子孙问答
+rep = ingest_book(result["store"], ..., result["archive_id"],
+                  final["chapters"], frags, final["records"])
+session = ChatSession(result["store"], cautions=rep["cautions"])
+print(session.ask("王二哥是谁？")["answer"].text)
 ```
 
 ## 目录结构
@@ -169,6 +190,7 @@ src/timememory/
 ├── assessment/    Phase 3：写作评估（gather/assess/plan/validate + 访谈提纲）
 ├── drafting/      Phase 4：初稿生成（stages/outline/write ⇄ check/polish/render）
 ├── review/        Phase 5：人工审核（suggest/human/apply + 定稿渲染）
+├── library/       Phase 6：家族记忆库（ingest + rewrite/retrieve/gate/answer）
 └── orchestration/ 编排层（interview → material → assess ⇄ interview … → draft）
 docs/                       设计文档
 tests/                      单元测试（unittest）

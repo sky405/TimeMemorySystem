@@ -222,6 +222,7 @@ def run_review(drafts: list, review_items: list, fragments: list,
     vals = graph.get_state(thread).values
     return {"book": vals["book"], "records": vals["records"],
             "chapters": [{"chapter_id": c["chapter_id"], "title": c["title"],
-                          "text": vals["finals"].get(c["chapter_id"], c["text"])}
+                          "text": vals["finals"].get(c["chapter_id"], c["text"]),
+                          "fragment_ids": c.get("fragment_ids", [])}
                          for c in vals["chapters"]],
             "stats": vals["stats"], "reviewer": reviewer}

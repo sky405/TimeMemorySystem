@@ -55,7 +55,7 @@ class DemoEmbedder:
 
     name = "demo"
 
-    def __init__(self, dim: int = 64):
+    def __init__(self, dim: int = 256):  # 64 维碰撞噪声太大（无关注入可达 0.37），256 维才有区分度
         self.dim = dim
 
     def embed_texts(self, texts: list[str]) -> list[list[float]]:
